@@ -84,10 +84,17 @@ def generar_json_salon(ruta_curso, examen, periodo):
         resp = reg.get("respuestas", {}) or {}
         fallos = []
         for q, correcta in clave.items():
-            marco = resp.get(q, "")
+            marco = resp.get(q) or ""   # burbuja vacía (None) -> "" (en blanco)
             if marco != correcta:
                 fallos.append({"p": int(q), "marco": marco})
         return fallos
+
+    def desempeno(reg):
+        # Los aciertos se recalculan con la clave VIGENTE: si la clave se corrigió
+        # después de calificar, los guardados quedan desfasados y el coordinador
+        # rechazaría el salón entero por inconsistencia.
+        fallos = incorrectas_de(reg)
+        return {"aciertos": total - len(fallos), "total": total, "incorrectas": fallos}
 
     estudiantes = []
     usados = set()
@@ -103,9 +110,7 @@ def generar_json_salon(ruta_curso, examen, periodo):
         else:
             estudiantes.append({
                 "codigo": cod, "n_lista": est["n_lista"],
-                "nombre": est["nombre"], "presento": True,
-                "aciertos": reg.get("aciertos"), "total": total,
-                "incorrectas": incorrectas_de(reg),
+                "nombre": est["nombre"], "presento": True, **desempeno(reg),
             })
 
     # Hojas calificadas cuyo código no está en la lista (no se pierde nada)
@@ -114,9 +119,8 @@ def generar_json_salon(ruta_curso, examen, periodo):
             continue
         estudiantes.append({
             "codigo": cod, "n_lista": None,
-            "nombre": reg.get("nombre", ""), "presento": True,
-            "aciertos": reg.get("aciertos"), "total": total,
-            "incorrectas": incorrectas_de(reg), "fuera_de_lista": True,
+            "nombre": reg.get("nombre", ""), "presento": True, **desempeno(reg),
+            "fuera_de_lista": True,
         })
 
     payload = {

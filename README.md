@@ -14,28 +14,45 @@ se empaqueta como **app de Android** con Buildozer.
 2. **Estudiantes:** lista por curso con código automático según la posición
    (001, 002…). Permite agregar, **editar o eliminar** (toca al estudiante),
    descargar una **plantilla** para llenar e **importar la planilla** (Excel/CSV).
-3. **Exámenes:** crea el examen y, en la pantalla **Generando claves**, elige la
-   respuesta correcta de cada pregunta (desplegable A/B/C/D). Luego genera el
+3. **Exámenes:** crea el examen y, en la pantalla **Respuestas correctas**, toca la
+   letra correcta de cada pregunta (botones A/B/C/D). Con **Crear también en…**
+   el mismo examen se guarda de una vez en los otros cursos del grado (o en los
+   que elijas con **Elegir**), sin volver a marcar las respuestas. Luego genera el
    **PDF** de la hoja:
    - **Media hoja** (2 iguales por página, para recortar): hasta 40 preguntas.
    - **Hoja completa** (1 por página): hasta 50 preguntas.
 4. **Calificar:** carga una o varias fotos → las **escanea** (recorta el fondo,
-   endereza y quita sombras, al estilo CamScanner) → las **lee y califica** →
-   guarda la imagen marcada y las notas.
-   Muestra una ventana de progreso y, al final, el **historial** de hojas del
-   examen: toca **Ver** para ver la hoja marcada, corregir su código o eliminarla.
-5. **Registro de notas:** genera el **Excel** cruzando código → estudiante, con
+   endereza y quita sombras, al estilo CamScanner) → las **lee y califica**
+   (varias a la vez) → se abre una **galería** para revisarlas deslizando:
+   corrige el código o descarta las que no sirvan. **Las notas se guardan al
+   tocar Confirmar**; si sales sin confirmar, no se guarda nada.
+   - Si llega otra hoja de un alumno que ya tenía una, **se queda la última**
+     (solo con códigos legibles que estén en la lista del curso).
+   - El **historial** del examen sale ordenado por código, con las hojas por
+     revisar arriba. **Ver** abre la misma galería para recorrerlas, corregir
+     códigos o eliminarlas.
+5. **Notas:** genera el **Excel** cruzando código → estudiante, con
    nota, promedio y "No presentó" para los ausentes. Se guarda en **Descargas**
    y se puede abrir o **compartir** (WhatsApp, Drive, correo).
-   - **Reporte del docente:** Excel aparte con promedio, mediana, aprobados,
+   - **Estadísticas del examen:** Excel aparte con promedio, mediana, aprobados,
      análisis por pregunta y gráficas.
-   - **Subir semestrales:** genera un archivo cifrado con las notas y lo envía
+   - **Enviar al coordinador:** genera un archivo cifrado con las notas y lo envía
      al coordinador (Google Drive, vía Apps Script). Se configura en `subida.py`.
 6. **Inicio:** agregar, **editar o eliminar** grados y cursos, y **copia de
    seguridad** (guarda todo en un `.zip` en Descargas y lo restaura en otro
    celular o tras reinstalar la app).
+   - **Códigos** (mosaico con código de barras): un PDF (en Descargas) con **una hoja carta vertical
+     por salón** (6 salones = 6 hojas): código en letra grande y nombre de cada
+     estudiante, para pegar en el salón o dictar los códigos. La letra se ajusta
+     para que todo el salón quepa en su hoja; los cursos sin estudiantes no salen.
+   - **Liberar espacio** (papelera): lista los exámenes con fotos, agrupados por
+     curso, con cuánto ocupa cada uno; vienen marcados los de hace más de 6 meses
+     (atajos: Más de 6 meses / Todos / Ninguno). Borra solo las **fotos** (la
+     original y la hoja marcada): **las notas se conservan** y el Excel y las
+     estadísticas siguen funcionando. Las fotos originales se guardan reducidas
+     (~0.15 MB) en cuanto se califican.
 7. **Cámara integrada** (Android): vista previa en vivo dentro de la app con
-   botón Capturar; la foto se califica al instante.
+   botón Tomar foto; la foto se califica al instante.
 
 ---
 
@@ -127,9 +144,9 @@ profesores/<Profesor>/<Grado>/<Curso>/
     estudiantes/                 → lista_estudiantes.xlsx
     examenes_claves/             → respuestas_<examen>.json (clave + formato de hoja)
     examenes_crudos/             → fotos recién cargadas (de paso)
-    examenes_crudos_archivados/  → fotos originales ya calificadas
+    examenes_crudos_archivados/  → fotos originales ya calificadas (reducidas, ~0.15 MB c/u)
     resultados/                  → imágenes marcadas + notas_<examen>.json
-                                   + coordinador_<curso>_<periodo>.json.enc
+                                   + coordinador_<grado><curso>_<periodo>.json.enc
     resultados_excel/            → registro_<examen>.xlsx, reporte_<curso>_<examen>.xlsx
 ```
 

@@ -44,7 +44,6 @@ import json
 import shutil
 import tempfile
 import threading
-import time
 from pathlib import Path
 import gestor_salones as GS
 import plataforma as PF
@@ -371,6 +370,85 @@ class BotonMenu(Button):
                 bx = x + s * (0.28 + i * 0.24)
                 Line(rounded_rectangle=(bx, y + s * 0.16, s * 0.14, s * alto, s * 0.04),
                      width=w)
+        elif nombre == "papelera":
+            # Tapa con asa, cuerpo que se angosta hacia abajo y dos ranuras
+            Line(points=[x + s * 0.08, y + s * 0.80, x + s * 0.92, y + s * 0.80], width=w,
+                 cap="round")
+            Line(points=[x + s * 0.36, y + s * 0.80, x + s * 0.40, y + s * 0.96,
+                         x + s * 0.60, y + s * 0.96, x + s * 0.64, y + s * 0.80], width=w,
+                 joint="round")
+            Line(points=[x + s * 0.18, y + s * 0.80, x + s * 0.25, y + s * 0.04,
+                         x + s * 0.75, y + s * 0.04, x + s * 0.82, y + s * 0.80], width=w,
+                 joint="round")
+            for fx in (0.41, 0.59):
+                Line(points=[x + s * fx, y + s * 0.20, x + s * fx, y + s * 0.62], width=w,
+                     cap="round")
+        elif nombre == "codigos":
+            # Tarjeta con un código de barras
+            Line(rounded_rectangle=(x, y + s * 0.12, s, s * 0.76, s * 0.12), width=w)
+            for fx, ancho in ((0.20, 1.6), (0.32, 1.0), (0.42, 2.0), (0.56, 1.0),
+                              (0.66, 1.6), (0.80, 1.0)):
+                Line(points=[x + s * fx, y + s * 0.30, x + s * fx, y + s * 0.70],
+                     width=w * ancho * 0.8)
+        elif nombre == "respaldo":
+            # Caja de archivo: tapa, cuerpo y asa
+            Line(rounded_rectangle=(x, y + s * 0.66, s, s * 0.26, s * 0.06), width=w)
+            Line(points=[x + s * 0.08, y + s * 0.66, x + s * 0.08, y + s * 0.06,
+                         x + s * 0.92, y + s * 0.06, x + s * 0.92, y + s * 0.66], width=w,
+                 joint="round")
+            Line(points=[x + s * 0.38, y + s * 0.46, x + s * 0.62, y + s * 0.46], width=w,
+                 cap="round")
+        elif nombre == "agregar":
+            Line(circle=(x + s * 0.5, y + s * 0.5, s * 0.46), width=w)
+            Line(points=[x + s * 0.5, y + s * 0.28, x + s * 0.5, y + s * 0.72], width=w,
+                 cap="round")
+            Line(points=[x + s * 0.28, y + s * 0.5, x + s * 0.72, y + s * 0.5], width=w,
+                 cap="round")
+        elif nombre == "organizar":
+            # Tres reguladores (deslizadores) con su perilla
+            for fy, fx in ((0.82, 0.30), (0.50, 0.68), (0.18, 0.44)):
+                Line(points=[x, y + s * fy, x + s, y + s * fy], width=w, cap="round")
+                Line(circle=(x + s * fx, y + s * fy, s * 0.11), width=w)
+
+
+class BotonHerramienta(Button):
+    """Tarjeta con un ícono dibujado (los de BotonMenu) y un texto corto.
+    vertical=True: ícono arriba y texto abajo (mosaico); False: en fila."""
+
+    def __init__(self, icono, texto, vertical=True, peligro=False, **kw):
+        super().__init__(text=texto, **kw)
+        self._icono, self._vertical = icono, vertical
+        self._tinta = (0.776, 0.157, 0.157, 1) if peligro else AZUL
+        self.color = TEXTO
+        self.font_size = "12.5sp" if vertical else "14sp"
+        self.bold = True
+        self.halign = "center" if vertical else "left"
+        self.valign = "bottom" if vertical else "middle"
+        self.color_fondo = (0, 0, 0, 0)
+        self.color_fondo_down = (0, 0, 0, 0)
+        _fondo_tarjeta(self, BLANCO, dp(16))
+        self.bind(state=lambda *_: setattr(
+            self._color_fondo, "rgba", BLANCO if self.state == "normal" else TINTE))
+        self._g = Canvas()
+        self.canvas.after.add(self._g)
+        _redibujar_al_cambiar(self, self._redibujar)
+
+    def _redibujar(self, *_):
+        if self._vertical:
+            d, s = dp(40), dp(20)
+            cx, cy = self.center_x, self.top - dp(8) - d / 2
+            self.padding = [dp(2), dp(6)]
+        else:
+            d, s = dp(34), dp(17)
+            cx, cy = self.x + dp(12) + d / 2, self.center_y
+            self.padding = [dp(12) + d + dp(10), 0, dp(8), 0]
+        self.text_size = (self.width, self.height)
+        self._g.clear()
+        with self._g:
+            Color(rgba=(0.992, 0.925, 0.925, 1) if self._tinta[0] > 0.5 else TINTE)
+            RoundedRectangle(pos=(cx - d / 2, cy - d / 2), size=(d, d), radius=[dp(11)])
+            Color(rgba=self._tinta)
+            BotonMenu._dibujar_icono(self._icono, cx - s / 2, cy - s / 2, s)
 
 
 class Pildora(Label):
@@ -1274,19 +1352,92 @@ def generar_pdf_a_descargas(nombre, cantidad, formato="carta"):
     return texto, ref, nombre_arch
 
 
-FOTO_GRANDE = 1_000_000   # bytes: una original de más de esto se puede reducir
-MESES_FOTOS = 6           # "Liberar espacio" ofrece borrar las de hace más de esto
+MESES_FOTOS = 6   # "Liberar espacio": exámenes calificados hace más de esto
 
 
-def fotos_originales():
-    """[(ruta, bytes, fecha_modificación)] de las fotos originales archivadas
-    de todos los cursos (profesores/<Profesor>/<Grado>/<Curso>/...)."""
-    out = []
-    for p in BASE.glob("*/*/*/examenes_crudos_archivados/*"):
-        if p.is_file():
-            st = p.stat()
-            out.append((p, st.st_size, st.st_mtime))
-    return out
+def _fotos_de_hoja(r, carpeta_curso):
+    """Archivos de una hoja calificada: su imagen marcada y su foto original
+    archivada (reducida: <nombre>.jpg; o con su nombre de antes)."""
+    rutas = []
+    if r.get("imagen"):
+        rutas.append(carpeta_curso / "resultados" / r["imagen"])
+    archivo = r.get("archivo")
+    if archivo:
+        arch = carpeta_curso / "examenes_crudos_archivados"
+        rutas += [arch / archivo, arch / f"{Path(archivo).stem}.jpg"]
+    return [x for x in dict.fromkeys(rutas) if x.is_file()]
+
+
+def examenes_con_fotos(meses=MESES_FOTOS):
+    """
+    Todos los exámenes que aún tienen fotos, por curso:
+    [{curso, examen, notas_json, hojas, fotos, bytes, ultima, viejo}].
+    'viejo': su última hoja se calificó hace más de 'meses' meses.
+    Las fotos originales sueltas (de hojas descartadas o reemplazadas, que no
+    son de ninguna nota) van en un grupo aparte (examen=None, viejo=True).
+    """
+    from datetime import datetime, timedelta
+    limite = datetime.now() - timedelta(days=meses * 30.5)
+    examenes, usadas = [], set()
+    for notas_json in BASE.glob("*/*/*/resultados/notas_*.json"):
+        carpeta = notas_json.parent.parent
+        try:
+            datos = json.loads(notas_json.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        fotos = []
+        for r in datos:
+            de_hoja = _fotos_de_hoja(r, carpeta)
+            usadas.update(de_hoja)
+            fotos += de_hoja
+        if not fotos:
+            continue
+        fechas = [r["fecha"] for r in datos if r.get("fecha")]
+        try:
+            ultima = datetime.fromisoformat(max(fechas)) if fechas else None
+        except ValueError:
+            ultima = None
+        examenes.append({"curso": _nombre_curso(carpeta.parent.name, carpeta.name),
+                         "examen": notas_json.stem[len("notas_"):].replace("_", " "),
+                         "notas_json": notas_json, "hojas": len(datos), "fotos": fotos,
+                         "bytes": sum(f.stat().st_size for f in fotos), "ultima": ultima,
+                         "viejo": ultima is not None and ultima < limite})
+    sueltas = [f for f in BASE.glob("*/*/*/examenes_crudos_archivados/*")
+               if f.is_file() and f not in usadas]
+    if sueltas:
+        examenes.append({"curso": "", "examen": None, "notas_json": None, "hojas": 0,
+                         "fotos": sueltas, "bytes": sum(f.stat().st_size for f in sueltas),
+                         "ultima": None, "viejo": True})
+
+    def orden(e):   # por curso (6°A, 6°B, … 11°B) y, dentro, el más viejo primero
+        g, _, c = e["curso"].partition("°")
+        return (e["examen"] is None, int(g) if g.isdigit() else 0, c,
+                e["ultima"] or datetime.min)
+    examenes.sort(key=orden)
+    return examenes
+
+
+def borrar_fotos_examenes(viejos):
+    """Borra las fotos (originales y hojas marcadas) de esos exámenes. Las
+    notas se conservan; cada hoja queda marcada con foto_borrada. Devuelve
+    los bytes liberados."""
+    liberado = 0
+    for e in viejos:
+        for f in e["fotos"]:
+            try:
+                tam = f.stat().st_size
+                f.unlink()
+                liberado += tam
+            except Exception:
+                pass
+        if e["notas_json"] is not None:
+            datos = json.loads(e["notas_json"].read_text(encoding="utf-8"))
+            for r in datos:
+                if r.pop("imagen", None):
+                    r["foto_borrada"] = True
+            e["notas_json"].write_text(json.dumps(datos, indent=2, ensure_ascii=False),
+                                       encoding="utf-8")
+    return liberado
 
 
 def _tamano(n_bytes):
@@ -1470,113 +1621,132 @@ class HomeScreen(Screen):
         btn_cal.bind(on_release=lambda *_: self._entrar())
         b.add_widget(btn_cal)
 
-        fila = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
-        btn_add = Factory.BotonOutline(text="+  Agregar grado")
-        btn_add.bind(on_release=lambda *_: self._popup_agregar())
-        fila.add_widget(btn_add)
-        btn_edit = Factory.BotonOutline(text="Organizar")
-        btn_edit.bind(on_release=lambda *_: self._popup_editar())
-        fila.add_widget(btn_edit)
-        b.add_widget(fila)
-
-        fila_extra = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
-        btn_cod = Factory.BotonTexto(text="Hojas de códigos", font_size="14sp")
-        btn_cod.bind(on_release=lambda *_: self._hojas_codigos())
-        fila_extra.add_widget(btn_cod)
-        btn_resp = Factory.BotonTexto(text="Copia de seguridad", font_size="14sp")
-        btn_resp.bind(on_release=lambda *_: self._popup_respaldo())
-        fila_extra.add_widget(btn_resp)
-        b.add_widget(fila_extra)
-        btn_esp = Factory.BotonTexto(text="Liberar espacio", size_hint_y=None, height=dp(40),
-                                     font_size="14sp")
-        btn_esp.bind(on_release=lambda *_: self._liberar_espacio())
-        b.add_widget(btn_esp)
-
+        self._acciones(b)
         self._refrescar_grados()
 
-    # ── Liberar espacio (fotos originales de las hojas) ─────────────────────
-    def _liberar_espacio(self):
-        en_segundo_plano("Revisando el espacio…", fotos_originales, self._popup_espacio)
+    def _acciones(self, b):
+        """Cursos en una fila; herramientas en mosaicos con ícono."""
+        fila = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(10))
+        for icono, texto, accion in (("agregar", "Agregar grado", self._popup_agregar),
+                                     ("organizar", "Organizar", self._popup_editar)):
+            btn = BotonHerramienta(icono, texto, vertical=False)
+            btn.bind(on_release=lambda *_, a=accion: a())
+            fila.add_widget(btn)
+        b.add_widget(fila)
+        fila = BoxLayout(size_hint_y=None, height=dp(86), spacing=dp(10))
+        for icono, texto, accion, peligro in (
+                ("codigos", "Códigos", self._hojas_codigos, False),
+                ("respaldo", "Respaldo", self._popup_respaldo, False),
+                ("papelera", "Liberar espacio", self._liberar_espacio, True)):
+            btn = BotonHerramienta(icono, texto, peligro=peligro)
+            btn.bind(on_release=lambda *_, a=accion: a())
+            fila.add_widget(btn)
+        b.add_widget(fila)
 
-    def _popup_espacio(self, fotos, err):
+    # ── Liberar espacio (fotos de los exámenes que se elijan) ───────────────
+    def _liberar_espacio(self):
+        en_segundo_plano("Revisando el espacio\u2026", examenes_con_fotos,
+                         self._popup_espacio)
+
+    def _popup_espacio(self, examenes, err):
         if err:
             aviso("No pudimos revisar el espacio", str(err))
             return
-        if not fotos:
-            aviso("Liberar espacio", "No hay fotos originales guardadas: no hay nada "
+        if not examenes:
+            aviso("Liberar espacio", "No hay fotos de exámenes guardadas: no hay nada "
                   "que liberar.")
             return
-        total = sum(t for _, t, _ in fotos)
-        grandes = [f for f in fotos if f[1] > FOTO_GRANDE]
-        limite = time.time() - MESES_FOTOS * 30.5 * 86400
-        viejas = [f for f in fotos if f[2] < limite]
-
-        cont = BoxLayout(orientation="vertical", spacing=dp(8), padding=[dp(8), dp(10)])
+        meses = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct",
+                 "nov", "dic")
+        cont = BoxLayout(orientation="vertical", spacing=dp(8), padding=[dp(6), dp(6)])
         cont.add_widget(_ajustar_texto(Label(
-            text=f"Las fotos originales de las hojas ocupan [b]{_tamano(total)}[/b] "
-                 f"({len(fotos)} foto{'s' if len(fotos) != 1 else ''}).\n\n"
-                 "Las notas y las hojas marcadas (las que ves en la galería) [b]no[/b] "
-                 "se borran.", markup=True, color=TEXTO, halign="left", valign="top",
-            size_hint_y=None, height=dp(96))))
-        cont.add_widget(Widget())
-        pop = Popup(title="Liberar espacio", content=cont, size_hint=(0.92, None),
-                    height=dp(210 + 58 * (bool(grandes) + bool(viejas) + 2)))
+            text=f"Elige los exámenes cuyas fotos quieres borrar. [b]Las notas se "
+                 f"conservan[/b]. Ya vienen marcados los de hace más de {MESES_FOTOS} "
+                 "meses.", markup=True, color=GRIS, font_size="13sp", halign="left",
+            valign="middle", size_hint_y=None, height=dp(54))))
 
-        def boton(texto, estilo, accion):
-            clase = {"accion": Factory.BotonAccion, "peligro": Factory.BotonPeligro,
-                     "outline": Factory.BotonOutline}[estilo]
-            btn = clase(text=texto, font_size="14sp", size_hint_y=None, height=dp(50))
-            btn.bind(on_release=lambda *_: (pop.dismiss(), accion and accion()))
-            cont.add_widget(btn)
+        casillas = []     # (Casilla, examen)
+        lista = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(2))
+        lista.bind(minimum_height=lista.setter("height"))
+        curso_actual = object()
+        for e in examenes:
+            if e["curso"] != curso_actual:
+                curso_actual = e["curso"]
+                titulo = f"Curso {e['curso']}" if e["curso"] else "Otras fotos"
+                lista.add_widget(Label(text=f"[b]{titulo}[/b]", markup=True, color=AZUL,
+                                       font_size="14sp", halign="left", valign="bottom",
+                                       size_hint_y=None, height=dp(32),
+                                       text_size=(None, None)))
+                lista.children[0].bind(size=lambda i, *_: setattr(i, "text_size", i.size))
+            if e["examen"] is None:
+                nombre = "Fotos sueltas"
+                detalle = f"De hojas descartadas o reemplazadas  ·  {_tamano(e['bytes'])}"
+            else:
+                nombre = e["examen"]
+                fecha = (f"{meses[e['ultima'].month - 1]} {e['ultima'].year}"
+                         if e["ultima"] else "sin fecha")
+                detalle = (f"{e['hojas']} hoja{'s' if e['hojas'] != 1 else ''}  ·  "
+                           f"{fecha}  ·  {_tamano(e['bytes'])}")
+            c = Casilla(texto=f"{nombre}\n[size=12sp][color={GRIS_HEX}]{detalle}"
+                              f"[/color][/size]", active=e["viejo"], height=dp(52))
+            casillas.append((c, e))
+            lista.add_widget(c)
+        scroll = ScrollView()
+        scroll.add_widget(lista)
+        cont.add_widget(scroll)
 
-        if grandes:
-            boton(f"Reducir {len(grandes)} foto{'s' if len(grandes) != 1 else ''} "
-                  "grande" + ("s" if len(grandes) != 1 else ""), "accion",
-                  lambda: self._hacer_espacio("reducir", grandes))
-        if viejas:
-            peso = _tamano(sum(t for _, t, _ in viejas))
-            boton(f"Borrar las de hace más de {MESES_FOTOS} meses ({peso})", "peligro",
-                  lambda: confirmar(
-                      "¿Borrar las fotos viejas?",
-                      f"Se borrarán {len(viejas)} fotos originales de hace más de "
-                      f"{MESES_FOTOS} meses ({peso}).\n\nLas notas y las hojas marcadas "
-                      "se conservan.", "Sí, borrar",
-                      lambda: self._hacer_espacio("borrar", viejas)))
-        boton(f"Borrar todas ({_tamano(total)})", "peligro", lambda: confirmar(
-            "¿Borrar todas las fotos originales?",
-            f"Se borrarán las {len(fotos)} fotos originales ({_tamano(total)}).\n\n"
-            "Las notas y las hojas marcadas se conservan.", "Sí, borrar todas",
-            lambda: self._hacer_espacio("borrar", fotos)))
-        boton("Ahora no", "outline", None)
+        atajos = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
+        for texto, regla in ((f"Más de {MESES_FOTOS} meses", lambda e: e["viejo"]),
+                             ("Todos", lambda e: True), ("Ninguno", lambda e: False)):
+            btn = Factory.BotonSuave(text=texto, font_size="13sp")
+            btn.bind(on_release=lambda *_, r=regla: [setattr(c, "active", r(e))
+                                                     for c, e in casillas])
+            atajos.add_widget(btn)
+        cont.add_widget(atajos)
+
+        fila = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
+        btn_borrar = Factory.BotonPeligro(font_size="14sp")
+        btn_no = Factory.BotonOutline(text="Cancelar", font_size="14sp", size_hint_x=0.6)
+        fila.add_widget(btn_borrar)
+        fila.add_widget(btn_no)
+        cont.add_widget(fila)
+        pop = Popup(title="Liberar espacio", content=cont, size_hint=(0.95, 0.9))
+        btn_no.bind(on_release=lambda *_: pop.dismiss())
+
+        def elegidos():
+            return [e for c, e in casillas if c.active]
+
+        def actualizar(*_):
+            peso = sum(e["bytes"] for e in elegidos())
+            btn_borrar.text = f"Borrar fotos ({_tamano(peso)})" if peso else "Elige exámenes"
+            btn_borrar.disabled = not peso
+        for c, _ in casillas:
+            c.bind(active=actualizar)
+        actualizar()
+
+        def _borrar(*_):
+            sel = elegidos()
+            n = sum(1 for e in sel if e["examen"] is not None)
+            peso = _tamano(sum(e["bytes"] for e in sel))
+            que = (f"{n} examen" if n == 1 else f"{n} exámenes") if n else "las fotos sueltas"
+
+            def hacer():
+                pop.dismiss()
+
+                def listo(liberado, err2):
+                    if err2:
+                        aviso("No pudimos liberar el espacio", str(err2))
+                        return
+                    aviso("¡Listo!", f"Liberaste {_tamano(liberado)}.")
+                en_segundo_plano("Liberando espacio\u2026",
+                                 lambda: borrar_fotos_examenes(sel), listo)
+            confirmar("¿Borrar las fotos?",
+                      f"Se borrarán las fotos de {que} ({peso}): la original y la hoja "
+                      "marcada.\n\nLas notas se conservan (Excel y estadísticas siguen "
+                      "funcionando), pero ya no podrás ver esas hojas en la galería.",
+                      "Sí, borrar fotos", hacer)
+        btn_borrar.bind(on_release=_borrar)
         pop.open()
-
-    def _hacer_espacio(self, accion, fotos):
-        def trabajo():
-            import lector_omr as L
-            antes = sum(t for _, t, _ in fotos)
-            despues = 0
-            for ruta, _, fecha in fotos:
-                try:
-                    if accion == "borrar":
-                        ruta.unlink()
-                    else:
-                        nueva = L.archivar_reducida(ruta, ruta.parent)
-                        # Conserva su fecha: así sigue contando como "vieja"
-                        os.utime(nueva, (fecha, fecha))
-                        despues += nueva.stat().st_size
-                except Exception:
-                    try:
-                        despues += ruta.stat().st_size
-                    except Exception:
-                        pass
-            return antes - despues
-
-        def listo(liberado, err):
-            if err:
-                aviso("No pudimos liberar el espacio", str(err))
-                return
-            aviso("¡Listo!", f"Liberaste {_tamano(liberado)}.")
-        en_segundo_plano("Liberando espacio…", trabajo, listo)
 
     # ── Hojas de códigos (todos los salones) ────────────────────────────────
     def _hojas_codigos(self):
@@ -2589,8 +2759,11 @@ class GaleriaHojas(_VentanaSinRastro):
             if r.get("imagen"):
                 img = Image(fit_mode="contain")
             else:
-                # Sin imagen (no se pudo leer): el motivo, grande y al centro
-                img = Label(text=r.get("error") or "No pudimos leer esta hoja.",
+                # Sin imagen (no se pudo leer, o se borró para liberar espacio)
+                texto = ("La foto de esta hoja se borró para liberar espacio.\n"
+                         "La nota se conserva." if r.get("foto_borrada") else
+                         r.get("error") or "No pudimos leer esta hoja.")
+                img = Label(text=texto,
                             color=BLANCO, font_size="16sp", halign="center",
                             valign="middle", padding=[dp(48), 0])
                 img.bind(size=lambda i, *_: setattr(i, "text_size", i.size))
