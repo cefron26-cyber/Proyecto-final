@@ -17,11 +17,17 @@ Salida:
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
+
 from typing import Optional
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+import almacen_json as AJ
+
+log = logging.getLogger("calificador.registro")
 
 NOTA_APROBACION = 6.0
 
@@ -53,12 +59,15 @@ def cargar_roster(ruta_curso: Path) -> list[dict]:
 def cargar_notas(ruta_curso: Path, examen: str) -> list[dict]:
     """Lee las notas que dejó el lector para ese examen."""
     archivo = ruta_curso / "resultados" / f"notas_{examen}.json"
-    if not archivo.exists():
-        return []
-    try:
-        return json.loads(archivo.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    # Si el archivo está dañado: se recupera la última copia buena. Si no hay
+    # copia, se avisa con un error en vez de devolver [] en silencio (un
+    # registro vacío haría creer que no hay notas).
+    datos, problema = AJ.leer_con_recuperacion(archivo, [])
+    if problema:
+        log.warning(problema)
+        if not datos:
+            raise ValueError(problema)
+    return datos
 
 
 def _firma_hoja(r: dict):

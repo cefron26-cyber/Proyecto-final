@@ -1,0 +1,22 @@
+name: Pruebas
+
+# Corre las pruebas automáticas (lector de hojas, notas, guardado, cifrado)
+# en cada cambio. Es independiente de la compilación del APK.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  pruebas:
+    name: Pruebas automáticas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias (sin Kivy: las pruebas no abren la interfaz)
+        run: pip install opencv-python-headless numpy openpyxl pytest
+      - name: Correr pruebas
+        run: python -m pytest pruebas -q

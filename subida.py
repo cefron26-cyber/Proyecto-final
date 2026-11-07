@@ -12,23 +12,23 @@ import os
 import urllib.request
 import urllib.error
 
-# ─── CONFIGURA ESTO (pega lo de tu Apps Script y guarda) ─────────────────────
-URL_SCRIPT = "https://script.google.com/macros/s/PEGA_TU_ID_DE_IMPLEMENTACION/exec"
-TOKEN_SECRETO = "pon-el-MISMO-token-que-pusiste-en-el-script"
-# ─────────────────────────────────────────────────────────────────────────────
+# La URL del Apps Script y el token YA NO están en el código: vienen de
+# credenciales.py (archivo en la carpeta privada de la app).
 
 
-def subir_a_drive(ruta_archivo, area, periodo, timeout=20):
+def subir_a_drive(ruta_archivo, area, periodo, url_script, token, timeout=20):
     """Sube el archivo al Apps Script. Devuelve ``(ok: bool, mensaje: str)``."""
-    if "PEGA_TU_ID" in URL_SCRIPT or not URL_SCRIPT.endswith("/exec"):
-        return False, "Falta configurar URL_SCRIPT en subida.py."
+    if not url_script or not url_script.endswith("/exec"):
+        return False, "Falta configurar la dirección del envío al coordinador."
+    if not token:
+        return False, "Falta configurar el token del envío al coordinador."
     if not os.path.exists(ruta_archivo):
         return False, "El archivo no existe en el teléfono."
     try:
         with open(ruta_archivo, "rb") as f:
             contenido_b64 = base64.b64encode(f.read()).decode("utf-8")
         payload = {
-            "token": TOKEN_SECRETO,
+            "token": token,
             "filename": os.path.basename(ruta_archivo),
             "content": contenido_b64,
             "area": area,
@@ -36,7 +36,7 @@ def subir_a_drive(ruta_archivo, area, periodo, timeout=20):
         }
         datos = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            URL_SCRIPT, data=datos,
+            url_script, data=datos,
             headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             cruda = resp.read().decode("utf-8", "replace")

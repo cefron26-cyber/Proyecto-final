@@ -64,7 +64,8 @@ def _notas_validas(ruta_curso, examen):
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) JSON POR SALÓN (para el coordinador)
 # ─────────────────────────────────────────────────────────────────────────────
-def generar_json_salon(ruta_curso, examen, periodo):
+def generar_json_salon(ruta_curso, examen, periodo, llave):
+    """llave: la de credenciales.py (la misma que usa coordinación)."""
     ruta_curso = Path(ruta_curso)
     clave_data = _buscar_clave(ruta_curso, examen)
     if clave_data is None:
@@ -136,7 +137,7 @@ def generar_json_salon(ruta_curso, examen, periodo):
     carpeta.mkdir(parents=True, exist_ok=True)
     texto = json.dumps(payload, ensure_ascii=False, indent=2)
     destino = carpeta / f"coordinador_{grado}{curso}_{periodo}.json.enc"
-    destino.write_bytes(cripto.cifrar(texto.encode("utf-8")))
+    destino.write_bytes(cripto.cifrar(texto.encode("utf-8"), llave))
     return destino
 
 

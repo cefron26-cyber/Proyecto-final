@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.buildozer/
+bin/
+.pytest_cache/
+# Respaldos manuales (ahora el historial lo guarda git)
+.revision/respaldo_*/
+# Datos locales de docentes y credenciales: nunca al repositorio
+profesores/
+credenciales_coordinador.json
+*.json.tmp
+*.json.bak[0-9]
+*.json.danado-*

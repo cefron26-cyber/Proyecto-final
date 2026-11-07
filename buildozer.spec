@@ -14,7 +14,7 @@ source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,json
 
 # Carpetas que NO van en el APK (muestras de prueba y datos locales del PC)
-source.exclude_dirs = muestras,profesores,__pycache__,camerax_provider,pruebas
+source.exclude_dirs = muestras,profesores,__pycache__,camerax_provider,pruebas,.revision
 # logo.png es el original (1.7 MB); el PDF usa assets/logo_pdf.png
 source.exclude_patterns = logo.png
 

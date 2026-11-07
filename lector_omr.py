@@ -1119,11 +1119,25 @@ def cargar_datos_examen(ruta_json: Path) -> DatosExamen:
         arr_correctas = datos["clave_correctas"]
     except KeyError as e:
         raise ValueError(f"JSON inválido, falta clave: {e}")
+    except (TypeError, ValueError):
+        raise ValueError("JSON inválido: 'total_preguntas' no es un número.")
 
-    clave = {i + 1: val for i, val in enumerate(arr_correctas)}
     # Las claves viejas no traen formato: todas eran de hoja completa
-    formato = LH.obtener(datos.get("formato")).clave
-    return DatosExamen(nombre, total, clave, formato)
+    fmt = LH.obtener(datos.get("formato"))
+    # Validar ANTES de calificar: una clave vacía o incompleta daría notas
+    # absurdas (o errores dentro de los hilos de calificación).
+    if total <= 0:
+        raise ValueError("La clave no tiene preguntas (total_preguntas debe ser mayor que 0).")
+    if total > fmt.max_preguntas:
+        raise ValueError(f"La clave dice {total} preguntas, pero la hoja "
+                         f"'{fmt.clave}' admite como máximo {fmt.max_preguntas}.")
+    if not isinstance(arr_correctas, list) or len(arr_correctas) < total:
+        n = len(arr_correctas) if isinstance(arr_correctas, list) else 0
+        raise ValueError(f"La clave tiene {n} respuestas correctas, pero el examen "
+                         f"tiene {total} preguntas.")
+
+    clave = {i + 1: val for i, val in enumerate(arr_correctas[:total])}
+    return DatosExamen(nombre, total, clave, fmt.clave)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

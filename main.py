@@ -48,6 +48,11 @@ from pathlib import Path
 import gestor_salones as GS
 import plataforma as PF
 import layout_hoja as LH
+import almacen_json as AJ
+import notas as NT
+import logging
+
+_log = logging.getLogger("calificador")
 
 BASE = GS.BASE_DIR  # carpeta "profesores"
 
@@ -1336,7 +1341,7 @@ def guardar_clave(ruta_curso, nombre, cantidad, clave_letras, formato):
     datos = {"examen": nombre, "total_preguntas": cantidad,
              "clave_correctas": clave_letras, "formato": LH.obtener(formato).clave}
     archivo = carpeta / f"respuestas_{nombre}.json"
-    archivo.write_text(json.dumps(datos, indent=4, ensure_ascii=False), encoding="utf-8")
+    AJ.escribir(archivo, datos, indent=4)
     return archivo
 
 
@@ -1431,12 +1436,11 @@ def borrar_fotos_examenes(viejos):
             except Exception:
                 pass
         if e["notas_json"] is not None:
-            datos = json.loads(e["notas_json"].read_text(encoding="utf-8"))
+            datos = AJ.leer(e["notas_json"], [])
             for r in datos:
                 if r.pop("imagen", None):
                     r["foto_borrada"] = True
-            e["notas_json"].write_text(json.dumps(datos, indent=2, ensure_ascii=False),
-                                       encoding="utf-8")
+            AJ.escribir(e["notas_json"], datos)
     return liberado
 
 
@@ -2804,17 +2808,9 @@ class GaleriaHojas(_VentanaSinRastro):
             return self.pantalla._estado_hoja(r, repetidos, self._lista)
         if i in self.descartadas:
             return "descartada"
-        estado = self.pantalla._estado_hoja(r, set(), self._lista)
-        if estado != "ok":
-            return estado
-        cod = str(r.get("codigo"))
-        # Dos fotos del mismo alumno en esta tanda: se guarda la última
-        if any(j > i and j not in self.descartadas and str(o.get("codigo")) == cod
-               for j, o in enumerate(self.hojas)):
-            return "tapada"
-        if any(str(g.get("codigo")) == cod for g in self.pantalla._leer_notas()):
-            return "reemplaza"
-        return "ok"
+        # 'tapada' (otra foto del alumno más adelante) / 'reemplaza' (ya había nota)
+        return NT.estado_en_tanda(self.hojas, i, self.descartadas,
+                                  self.pantalla._leer_notas(), self._lista)
 
     def _texto(self, r, estado):
         codigo = str(r.get("codigo", "???"))
@@ -2912,6 +2908,31 @@ class GaleriaHojas(_VentanaSinRastro):
         self._armar(i)
 
     def _confirmar(self):
+        """Antes de guardar: si alguna hoja reemplaza una nota ya guardada
+        (o a otra foto del mismo alumno en esta tanda), se pide confirmación
+        explícita con los códigos afectados."""
+        estados = {i: self._estado(i) for i in range(len(self.hojas))
+                   if i not in self.descartadas}
+        reemplazan = sorted({str(self.hojas[i].get("codigo"))
+                             for i, e in estados.items() if e == "reemplaza"})
+        tapadas = sorted({str(self.hojas[i].get("codigo"))
+                          for i, e in estados.items() if e == "tapada"})
+        if not reemplazan and not tapadas:
+            self._guardar_confirmadas()
+            return
+        partes = []
+        if reemplazan:
+            partes.append(f"Reemplazarán la nota que ya estaba guardada de "
+                          f"{len(reemplazan)} alumno(s): códigos {', '.join(reemplazan)}.")
+        if tapadas:
+            partes.append(f"Hay más de una foto de los códigos {', '.join(tapadas)} "
+                          "en esta tanda: solo se guardará la última de cada uno.")
+        partes.append("La nota anterior queda anotada en el historial de reemplazos "
+                      "de la carpeta 'resultados'.")
+        confirmar("¿Reemplazar notas guardadas?", "\n\n".join(partes),
+                  "Sí, reemplazar", self._guardar_confirmadas)
+
+    def _guardar_confirmadas(self):
         conservadas = self._conservadas()
         descartadas = [r for j, r in enumerate(self.hojas) if j in self.descartadas]
         for r in descartadas:
@@ -2979,19 +3000,8 @@ class CalificarScreen(Screen):
             roster = []
         return {e["codigo"]: e["nombre"] for e in roster}
 
-    @staticmethod
-    def _estado_hoja(r, repetidos, lista):
-        """'error', 'ilegible', 'repetido', 'fuera' (no está en la lista) u 'ok'."""
-        codigo = str(r.get("codigo", "???"))
-        if codigo == "ERROR":
-            return "error"
-        if not codigo.isdigit():
-            return "ilegible"
-        if codigo in repetidos:
-            return "repetido"
-        if lista and codigo not in lista:
-            return "fuera"
-        return "ok"
+    # Reglas de las notas: en notas.py (sin interfaz, con pruebas)
+    _estado_hoja = staticmethod(NT.estado_hoja)
 
     def _hojas_ordenadas(self, guardados=None, repetidos=None, lista=None):
         """Lo que se muestra, en orden: las ilegibles de esta sesión (no se
@@ -3004,11 +3014,7 @@ class CalificarScreen(Screen):
 
     def _ordenar(self, notas, repetidos, lista):
         """Por código (001, 002…); las que hay que revisar, arriba."""
-        def clave(r):
-            cod = str(r.get("codigo", ""))
-            return (self._estado_hoja(r, repetidos, lista) == "ok",
-                    int(cod) if cod.isdigit() else -1, r.get("fecha", ""))
-        return sorted(notas, key=clave)
+        return NT.ordenar(notas, repetidos, lista)
 
     def construir(self):
         app = App.get_running_app()
@@ -3267,13 +3273,15 @@ class CalificarScreen(Screen):
         return dir_salida / f"notas_{self.examen}.json"
 
     def _leer_notas(self):
-        notas_path = self._ruta_notas()
-        if not notas_path.exists():
-            return []
-        try:
-            return json.loads(notas_path.read_text(encoding="utf-8"))
-        except Exception:
-            return []
+        """Notas guardadas de este examen. Si el archivo está dañado se
+        recupera la última copia buena y se le avisa al docente (nunca se
+        devuelve una lista vacía en silencio: el dañado queda apartado)."""
+        datos, problema = AJ.leer_con_recuperacion(self._ruta_notas(), [])
+        if problema:
+            _log.warning(problema)
+            Clock.schedule_once(lambda dt: aviso("Revisa las notas de este examen",
+                                                 problema))
+        return datos
 
     def _guardar_registros(self, nuevos):
         """Agrega/actualiza registros en notas_<examen>.json (clave: archivo).
@@ -3284,24 +3292,24 @@ class CalificarScreen(Screen):
         la lista del curso (o cualquiera legible si aún no hay lista); un
         código dudoso no pisa a nadie y queda 'por revisar'.
         Devuelve cuántas hojas anteriores se reemplazaron."""
-        lista = self._lista_codigos()
-        registros = {r.get("archivo", ""): r for r in self._leer_notas()}
-        reemplazadas = 0
-        for r in nuevos:
-            cod = str(r.get("codigo", ""))
-            if cod.isdigit() and (not lista or cod in lista):
-                for archivo, viejo in list(registros.items()):
-                    if archivo != r["archivo"] and str(viejo.get("codigo", "")) == cod:
-                        del registros[archivo]
-                        self._borrar_imagen(viejo)
-                        reemplazadas += 1
-            registros[r["archivo"]] = r
-        self._escribir_notas(list(registros.values()))
-        return reemplazadas
+        registros, reemplazos = NT.fusionar(self._leer_notas(), nuevos,
+                                            self._lista_codigos())
+        self._escribir_notas(registros)
+        # Solo tras guardar bien: anotar y borrar las imágenes reemplazadas
+        self._anotar_reemplazos(reemplazos)
+        for viejo, _ in reemplazos:
+            self._borrar_imagen(viejo)
+        return len(reemplazos)
+
+    def _anotar_reemplazos(self, reemplazos):
+        """Historial (una línea JSON por reemplazo) en
+        resultados/reemplazos_<examen>.log: qué nota había y cuál quedó."""
+        NT.anotar_reemplazos(
+            self._ruta_notas().parent / f"reemplazos_{self.examen}.log", reemplazos)
 
     def _escribir_notas(self, datos):
-        self._ruta_notas().write_text(json.dumps(datos, indent=2, ensure_ascii=False),
-                                      encoding="utf-8")
+        # Atómico + copia rotativa (notas_<examen>.json.bak1 … bak5)
+        AJ.escribir(self._ruta_notas(), datos)
 
     def _borrar_imagen(self, r):
         """Borra la imagen marcada de una hoja (si tiene)."""
@@ -3368,13 +3376,17 @@ class CalificarScreen(Screen):
         """Cambia el código de una hoja; 'quitar': hojas que esta reemplaza."""
         fuera = {e.get("archivo") for e in quitar}
         data = [e for e in self._leer_notas() if e.get("archivo") not in fuera]
+        queda = None
         for e in data:
             if e.get("archivo") == archivo:
                 e["codigo"] = nuevo
                 e["codigo_corregido"] = True
+                queda = e
+        self._escribir_notas(data)
+        if queda is not None:
+            self._anotar_reemplazos([(e, queda) for e in quitar])
         for e in quitar:
             self._borrar_imagen(e)
-        self._escribir_notas(data)
 
     # ── Cámara (solo Android / iOS) ───────────────────────────────────────────
     def _ruta_captura(self):
@@ -3694,6 +3706,54 @@ def _guardar_area(area):
         pass
 
 
+def pedir_credenciales_coordinador(al_guardar=None):
+    """Formulario para pegar los datos de envío que entrega coordinación
+    (dirección del Apps Script, token y llave). Se guardan en la carpeta
+    privada de la app, nunca en el código ni en el APK."""
+    import credenciales as CR
+    carpeta = App.get_running_app().user_data_dir
+    actuales = CR.cargar(carpeta)
+    cont = BoxLayout(orientation="vertical", spacing=dp(6), padding=[dp(8), dp(10)])
+    cont.add_widget(_ajustar_texto(Label(
+        text="Pega los datos de envío que te dio coordinación. Se guardan solo "
+             "en este teléfono.",
+        size_hint_y=None, height=dp(40), font_size="13sp", color=GRIS,
+        halign="left", valign="middle")))
+    campos = {}
+    for clave, titulo, oculto in (("url_script", "Dirección (termina en /exec)", False),
+                                  ("token", "Token", True),
+                                  ("llave", "Llave de cifrado", True)):
+        cont.add_widget(_caption(titulo))
+        ti = TextInput(text=actuales.get(clave, ""), multiline=False, password=oculto,
+                       size_hint_y=None, height=dp(44))
+        campos[clave] = ti
+        cont.add_widget(ti)
+    lbl = _ajustar_texto(Label(text="", size_hint_y=None, height=dp(48), font_size="12.5sp",
+                               color=(0.776, 0.157, 0.157, 1), halign="left",
+                               valign="middle"))
+    cont.add_widget(lbl)
+    btn = Factory.BotonAccion(text="Guardar", size_hint_y=None, height=dp(50))
+    cont.add_widget(btn)
+    pop = Popup(title="Datos de envío al coordinador", content=cont,
+                size_hint=(0.92, 0.78))
+
+    def _ok(*_):
+        try:
+            CR.guardar(carpeta, {k: ti.text for k, ti in campos.items()})
+        except ValueError as e:
+            lbl.text = str(e)
+            return
+        except OSError as e:
+            lbl.text = f"No pudimos guardarlos: {e}"
+            return
+        pop.dismiss()
+        if al_guardar:
+            al_guardar(CR.cargar(carpeta))
+
+    btn.bind(on_release=_ok)
+    pop.open()
+
+
 class SemestralesScreen(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -3763,10 +3823,21 @@ class SemestralesScreen(Screen):
                                         size_hint_y=None, height=dp(54))
         btn_coord.bind(on_release=self._enviar_coordinador)
         b.add_widget(btn_coord)
+        btn_datos = Factory.BotonOutline(text="Datos de envío",
+                                           size_hint_y=None, height=dp(46))
+        btn_datos.bind(on_release=lambda *_: pedir_credenciales_coordinador())
+        b.add_widget(btn_datos)
         self._volver(b)
 
     def _enviar_coordinador(self, *_):
+        import credenciales as CR
         app = App.get_running_app()
+        cred = CR.cargar(app.user_data_dir)
+        if CR.problemas(cred):
+            # Primera vez (o datos incompletos): pedirlos y seguir con el envío
+            pedir_credenciales_coordinador(
+                al_guardar=lambda _c: self._enviar_coordinador())
+            return
         examen = self.sp_examen.text
         periodo = f"{self.sp_anio.text}-{self.sp_semestre.text}"
         area = self.sp_area.text
@@ -3779,8 +3850,10 @@ class SemestralesScreen(Screen):
                 import reportes
                 import subida
                 # 1) Generar el .json.enc cifrado  2) subirlo
-                ruta = reportes.generar_json_salon(ruta_curso, examen, periodo)
-                ok, msg = subida.subir_a_drive(str(ruta), area, periodo)
+                ruta = reportes.generar_json_salon(ruta_curso, examen, periodo,
+                                                   cred["llave"])
+                ok, msg = subida.subir_a_drive(str(ruta), area, periodo,
+                                               cred["url_script"], cred["token"])
                 return ruta, ok, msg
 
             def listo(res, err):
