@@ -17,6 +17,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: "Instalar dependencias (sin Kivy, las pruebas no abren la interfaz)"
-        run: pip install opencv-python-headless numpy openpyxl pytest
+        run: pip install opencv-python-headless numpy openpyxl pillow pytest
       - name: Correr pruebas
         run: python -m pytest pruebas -q
