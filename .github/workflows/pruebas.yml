@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Instalar dependencias (sin Kivy: las pruebas no abren la interfaz)
+      - name: "Instalar dependencias (sin Kivy, las pruebas no abren la interfaz)"
         run: pip install opencv-python-headless numpy openpyxl pytest
       - name: Correr pruebas
         run: python -m pytest pruebas -q
